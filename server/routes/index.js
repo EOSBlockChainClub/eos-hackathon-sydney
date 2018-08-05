@@ -1,6 +1,14 @@
 const keystone = require('keystone');
-const importRoutes = keystone.importer(__dirname);
+const Eos = require('eosjs');
+const account = {
+  name: 'useraaaaaaaa',
+  privateKey: '5K7mtrinTFrVTduSxizUc5hjXJEtTjVTsqSHeBHes1Viep86FP5',
+  publicKey: 'EOS6kYgMTCh1iqpq9XGNQbEi8Q6k5GujefN9DSs55dcjVyFAq7B6b',
+};
+const eos = Eos({keyProvider: account.privateKey});
+const donations = [];
 
+const importRoutes = keystone.importer(__dirname);
 const Donation = keystone.list('Donation');
 
 module.exports = (app) => {
@@ -52,11 +60,33 @@ module.exports = (app) => {
       .findById(req.params.id)
       .sort({ createdAt: -1 })
       .exec((err, donation) => {
-        donation.isProcessed = true;
-        donation.save((err) => {
-          res.json({ success: true });
-          // TODO: SAVE TO BLOCKCHAIN
-        });
+        (async () => {
+          try {
+            donations.push(donation);
+            const result = await eos.transaction({
+              actions: [{
+                account: 'notechainacc',
+                name: 'update',
+                authorization: [{
+                  actor: account.name,
+                  permission: 'active',
+                }],
+                data: {
+                  _user: account.name,
+                  _note: JSON.stringify(donations),
+                },
+              }],
+            });
+            console.log(result);
+
+            donation.isProcessed = true;
+            donation.save((err) => {
+              res.json({ success: true });
+            });
+          } catch (e) {
+            console.log(e);
+          }
+        })();
       });
   });
   api.post('/donations', (req, res) => {
